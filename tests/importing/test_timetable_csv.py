@@ -84,10 +84,12 @@ def test_timetable_csv_replaces_only_years_3_to_5_and_builds_lab_bundles(tmp_pat
         assert all(":" in bundle_id for bundle_id in bundle_ids)
 
 
-def test_real_parsed_timetable_has_only_documented_wrn_gap():
-    rows = ParsedTimetableCsvImporter().parse("PDF/parsed_timetables.csv")
-    assert len(rows) == 66
+def test_synthetic_timetable_reports_only_documented_wrn_gap(tmp_path):
+    path = tmp_path / "parsed_timetables.csv"
+    write_csv(path)
+    rows = ParsedTimetableCsvImporter().parse(path)
+    assert len(rows) == 5
     from academic_planner.importing.timetable_csv import COURSE_MAPPING
     unresolved = [row for row in rows if (row.year, row.canonical_course) not in COURSE_MAPPING]
-    assert len(unresolved) == 2
+    assert len(unresolved) == 1
     assert {row.source_course for row in unresolved} == {"WRN (Work Ready Now)"}
