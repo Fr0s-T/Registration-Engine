@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Local academic course and graduation planning dashboard">
+  <title>Scenario Lab - Academic Planning Engine</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1f3a'/%3E%3Cpath d='M12 25 32 14l20 11-20 11z' fill='%235fa8ff'/%3E%3Cpath d='M20 32v10c7 6 17 6 24 0V32l-12 7z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css?v=20261012-1">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-mark" aria-hidden="true">AP</div>
+    <div>
+      <h1>Academic Planning Engine</h1>
+      <p>Course eligibility, conflict-free registration, and graduation projection</p>
+    </div>
+    <span class="environment-badge">Scenario and regression workspace</span>
+    <nav class="main-nav"><a href="/student-input">Student Workspace</a><a href="/scenario-lab">Scenario Lab</a><a href="/courses">Courses</a><a href="/timetable">Timetable</a><a href="/settings">Settings</a><a href="/imports">Imports</a></nav>
+  </header>
+
+  <main class="app-shell">
+    <aside class="control-panel" aria-label="Planning configuration">
+      <form id="planner-form">
+        <section class="control-section">
+          <div class="section-kicker">Scenario Lab</div>
+          <label for="scenario">Academic profile</label>
+          <select id="scenario" name="scenario" required></select>
+          <p id="scenario-description" class="field-help"></p>
+          <div id="profile-facts" class="profile-facts"></div>
+          <p class="rollout-note"><strong>2026–2027 rollout:</strong> NEW Years 1–4 and OLD Year 5 may be offered. Actual eligibility still requires an outstanding curriculum requirement or approved equivalency; nominal year alone does not decide it.</p>
+        </section>
+
+        <section class="control-section">
+          <div class="section-kicker">Course load</div>
+          <p class="field-help">Regular semesters use the documented 30-ECTS capacity. Explicit per-term overrides remain available below.</p>
+        </section>
+
+        <section class="control-section">
+          <div class="section-heading-row">
+            <div>
+              <div class="section-kicker">Term overrides</div>
+              <p class="field-help no-margin">Replace capacity for specific periods.</p>
+            </div>
+            <button class="text-button" type="button" id="add-override">Add</button>
+          </div>
+          <div id="override-list" class="override-list"></div>
+        </section>
+
+        <details class="advanced-panel">
+          <summary>Advanced preferences</summary>
+          <div class="advanced-grid">
+            <label>Academic-year priority
+              <input id="year-weight" type="number" min="0" max="1000" value="10">
+              <small>Zero disables this soft tie-breaker.</small>
+            </label>
+            <label>Fall/Spring alignment
+              <input id="semester-weight" type="number" min="0" max="1000" value="2">
+            </label>
+            <label class="switch-row">
+              <span>Allow training postponement</span>
+              <input id="training-postponement" type="checkbox" checked>
+            </label>
+            <label>Training delay penalty
+              <input id="training-penalty" type="number" min="0" max="1000" value="10">
+            </label>
+            <label>Maximum training delay (years)
+              <input id="training-max-delay" type="number" min="0" max="10" placeholder="No maximum">
+            </label>
+            <label>Solver time limit (seconds)
+              <input id="solver-limit" type="number" min="0.1" max="120" step="0.1" value="20">
+            </label>
+            <label>Initial regular-semester horizon
+              <input id="initial-horizon" type="number" min="1" max="40" value="10">
+            </label>
+            <label>Maximum regular-semester horizon
+              <input id="max-horizon" type="number" min="1" max="40" value="20">
+              <small>Training periods are not counted as regular semesters.</small>
+            </label>
+            <label class="switch-row">
+              <span>Automatically extend the horizon</span>
+              <input id="auto-extend-horizon" type="checkbox" checked>
+            </label>
+            <label>Extension step (regular semesters)
+              <input id="horizon-step" type="number" min="1" max="10" value="2">
+            </label>
+            <label class="switch-row">
+              <span>Run course-selection diagnostics</span>
+              <input id="selection-diagnostics" type="checkbox">
+            </label>
+            <label class="switch-row">
+              <span>Exploratory unverified equivalency assumptions</span>
+              <input id="exploratory-recognition" type="checkbox">
+              <small>Transition scenario only; assumptions remain request-scoped.</small>
+            </label>
+            <p class="field-help">Optional bounded counterfactual solver checks; disabled by default.</p>
+          </div>
+        </details>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-button" id="generate-button">Generate Academic Plan</button>
+          <button type="button" class="secondary-button" id="reset-button">Reset defaults</button>
+        </div>
+      </form>
+    </aside>
+
+    <section class="workspace" aria-live="polite">
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon" aria-hidden="true">01</div>
+        <h2>Build a graduation path</h2>
+        <p>Choose a student scenario and planning assumptions. The optimizer will evaluate the complete horizon before selecting the current schedule.</p>
+      </div>
+
+      <div id="loading-state" class="loading-state hidden" role="status">
+        <div class="spinner" aria-hidden="true"></div>
+        <h2>Evaluating the academic plan</h2>
+        <p>Checking prerequisites, timetable conflicts, curriculum rollout, and graduation timing.</p>
+      </div>
+
+      <div id="error-state" class="error-state hidden" role="alert">
+        <h2>Could not generate the plan</h2>
+        <p id="error-message"></p>
+      </div>
+
+      <div id="results" class="results hidden">
+        <div class="results-header">
+          <div>
+            <span id="result-scenario" class="eyebrow"></span>
+            <h2>Academic plan</h2>
+            <p id="result-context"></p>
+          </div>
+          <button type="button" class="secondary-button print-button" id="print-button">Print plan</button>
+        </div>
+
+        <div id="summary-cards" class="summary-grid"></div>
+        <section id="print-notes" class="print-only" aria-label="Planning notes"></section>
+        <section id="warnings-section" class="warning-panel"></section>
+
+        <section class="content-card" id="requirement-classification-section">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">Student-specific reconciliation</span>
+              <h3>Graduation requirement classification</h3>
+              <p>Registration availability is shown separately from degree-credit authority.</p>
+            </div>
+          </div>
+          <div id="requirement-classifications" class="future-plan"></div>
+        </section>
+
+        <section class="content-card" id="eligible-pool-section">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">Candidate set</span>
+              <h3>EligibleCoursePool</h3>
+              <p id="pool-summary"></p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="eligible-table">
+              <thead><tr>
+                <th><button type="button" data-sort="code">Course</button></th>
+                <th>Title</th>
+                <th><button type="button" data-sort="credits">ECTS</button></th>
+                <th><button type="button" data-sort="reference_year">Year</button></th>
+                <th>Curriculum</th>
+                <th>Selection status</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <details class="content-card blocked-card">
+          <summary><span>Blocked courses</span><span id="blocked-count" class="count-pill"></span></summary>
+          <div id="blocked-list" class="blocked-list"></div>
+        </details>
+
+        <section class="content-card timetable-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">Solver selection</span>
+              <h3>Current-semester timetable</h3>
+              <p id="current-term-label"></p>
+            </div>
+            <span id="current-credit-pill" class="credit-pill"></span>
+          </div>
+          <div id="selected-course-strip" class="course-strip"></div>
+          <div id="timetable"></div>
+        </section>
+
+        <section class="content-card" id="future-plan-section">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">Unverified projection</span>
+              <h3>Future graduation plan</h3>
+              <p id="graduation-label"></p>
+            </div>
+          </div>
+          <div id="future-plan" class="future-plan"></div>
+        </section>
+
+        <section class="content-card validation-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">Graduation validation</span>
+              <h3>Model result</h3>
+            </div>
+          </div>
+          <div id="graduation-validation" class="validation-summary"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="/static/app.js?v=20261012-1" defer></script>
+</body>
+</html>

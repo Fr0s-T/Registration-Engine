@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width">
+  <title>Active Timetable</title><link rel="stylesheet" href="/static/admin.css?v=20261010-4"><link rel="stylesheet" href="/static/admin-enhanced.css?v=20261010-4">
+</head>
+<body class="timetable-page">
+<header><h1>Academic Planning Engine</h1><div id="nav"></div></header>
+<main>
+  <div id="message" class="hidden"></div>
+  <div class="toolbar timetable-toolbar">
+    <label>Academic year starts <input id="year" type="number" min="2000" max="2200"></label>
+    <select id="semester"><option>FALL</option><option>SPRING</option></select>
+    <button id="term">Replace active term</button><span class="toolbar-divider"></span>
+    <select id="year-filter"><option value="">Show years 1–5</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    <select id="curriculum"><option value="">OLD + NEW</option><option>OLD</option><option>NEW</option></select>
+    <button class="primary" id="add">＋ Add offering</button>
+    <button id="generate-placeholders">Generate Year 1–2 placeholders</button>
+  </div>
+  <section class="calendar-intro">
+    <div><span class="eyebrow">ACTIVE SEMESTER</span><h2>Weekly calendars by year and language</h2><p>English and French tracks are shown separately. Program year remains an organizational view only.</p></div>
+    <div id="calendar-summary" class="calendar-summary"></div>
+  </section>
+  <div id="year-calendars" class="year-calendars"></div>
+</main>
+<div id="modal" class="modal hidden"><form id="form" class="card"><h2 id="offering-form-title">Add offering</h2><div class="formgrid">
+  <label class="wide">Catalog course<select name="course_id"></select></label>
+  <label>Language track<select name="language_track"><option value="">All</option><option>EN</option><option>FR</option></select></label>
+  <label>Section code<input name="section_code" required value="A"></label>
+  <label>Component<select name="component"><option>LECTURE</option><option>LAB</option></select></label>
+  <label>Registration bundle<input name="bundle_key" value="A" required></label>
+  <label>Campus<input name="campus"></label><label>Room<input name="room"></label>
+  <label class="wide">Instructor<input name="instructor"></label>
+  <label class="wide">Source notes<textarea name="notes"></textarea></label>
+  <label>Weekday<select name="weekday"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6">Sunday</option></select></label>
+  <label>Starts <input name="start" type="time" required></label><label>Ends <input name="end" type="time" required></label>
+</div><p class="small">Sections sharing a bundle key are coupled. Alternative section choices use different bundle keys.</p><div class="actions"><button class="primary">Save changes</button><button type="button" id="cancel">Cancel</button><button type="button" class="danger ghost-danger hidden" id="delete-offering">Remove offering</button></div></form></div>
+<script type="module" src="/static/timetable.js?v=20261010-5"></script></body></html>

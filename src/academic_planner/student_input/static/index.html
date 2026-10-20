@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Import, review, and analyze one student academic record">
+  <title>Student Workspace - Academic Planning Engine</title>
+  <link rel="stylesheet" href="/student-input-assets/student-input.css?v=20261014-9">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/student-input" aria-label="Academic Planning Engine home"><span>AP</span><strong>Academic Planning Engine</strong></a>
+    <nav aria-label="Main navigation">
+      <a class="active" href="/student-input">Student Workspace</a>
+      <a href="/">Scenario Lab</a>
+      <a href="/courses">Courses</a>
+      <a href="/timetable">Timetable</a>
+      <a href="/settings">Settings</a>
+      <a href="/imports">Imports</a>
+    </nav>
+  </header>
+
+  <div class="workflow-bar" aria-label="Student workflow">
+    <span class="workflow-step active" data-workflow-step="1"><b>1</b> Import</span>
+    <span class="workflow-line"></span>
+    <span class="workflow-step" data-workflow-step="2"><b>2</b> Review</span>
+    <span class="workflow-line"></span>
+    <span class="workflow-step" data-workflow-step="3"><b>3</b> Analyze and plan</span>
+  </div>
+
+  <main class="page-shell" id="page-shell">
+    <section class="input-column" aria-labelledby="input-title">
+      <div class="eyebrow">Student workspace</div>
+      <h1 id="input-title">Paste the Contract Sheet</h1>
+      <p class="lead">Copy the complete portal page. We will validate it against both active curricula before anything is saved.</p>
+      <form id="paste-form">
+        <label for="contract-text">Portal text</label>
+        <textarea id="contract-text" required minlength="20" spellcheck="false" placeholder="Paste from Contract Sheet | student number - student name through the final Earned Credits line."></textarea>
+        <div class="input-meta"><span id="character-count">0 characters</span><span>Nothing is saved until you approve it</span></div>
+        <div class="actions">
+          <button class="primary" id="parse-button" type="submit">Parse and review</button>
+          <button class="secondary" id="clear-button" type="button">Clear</button>
+        </div>
+      </form>
+      <aside class="how-it-works">
+        <strong>What happens next</strong>
+        <ol>
+          <li>Read identity, categories, attempts, grades, and notes.</li>
+          <li>Combine zero-credit <code>CODEL</code> rows with their parent course.</li>
+          <li>Resolve OLD/NEW codes through verified equivalencies.</li>
+          <li>Ask for review only if a match, status, or credit total does not add up.</li>
+          <li>Save the verified record and open its analysis here.</li>
+        </ol>
+      </aside>
+    </section>
+
+    <section class="preview-column" aria-live="polite">
+      <div id="empty-state" class="empty-state">
+        <div class="empty-mark">TXT</div>
+        <h2>Your parsed academic record will appear here</h2>
+        <p>Nothing is stored while you are checking the pasted input.</p>
+      </div>
+      <div id="loading-state" class="loading-state hidden">
+        <span class="spinner" aria-hidden="true"></span>
+        <h2>Reading the contract sheet</h2>
+        <p>Matching courses and checking the earned-credit ledger...</p>
+      </div>
+      <div id="error-state" class="error-state hidden" role="alert"></div>
+      <div id="preview" class="hidden">
+        <section id="student-header" class="student-header"></section>
+        <section id="summary" class="summary-grid"></section>
+        <section id="registered-panel"></section>
+        <section id="review-panel"></section>
+        <section id="save-panel"></section>
+        <section id="credit-panel"></section>
+        <section id="category-panel"></section>
+        <section class="records-card">
+          <div class="records-heading">
+            <div><span class="eyebrow">Normalized record</span><h2>Courses and attempts</h2></div>
+            <div id="filters" class="filters" aria-label="Course filters"></div>
+          </div>
+          <div id="course-groups" class="course-groups"></div>
+        </section>
+      </div>
+
+      <div id="analysis" class="analysis hidden">
+        <section class="analysis-header">
+          <div>
+            <span class="eyebrow">Saved student</span>
+            <h1 id="analysis-student-name">Student analysis</h1>
+            <p id="analysis-student-context"></p>
+          </div>
+          <div class="analysis-header-actions">
+            <button type="button" class="secondary" id="back-to-record">Review imported record</button>
+            <button type="button" class="secondary" id="print-analysis">Print plan</button>
+            <button type="button" class="secondary" id="new-student">Start another student</button>
+          </div>
+        </section>
+
+        <section id="registration-mode-panel"></section>
+        <section id="planning-options-panel"></section>
+        <div id="plan-loading" class="loading-state hidden">
+          <span class="spinner" aria-hidden="true"></span>
+          <h2>Building the academic plan</h2>
+          <p>Checking the saved record, prerequisites, current registration, and the graduation horizon.</p>
+        </div>
+        <div id="plan-error" class="error-state hidden" role="alert"></div>
+        <div id="plan-results" class="hidden">
+          <section id="plan-summary" class="summary-grid analysis-summary"></section>
+          <section id="analysis-print-notes" class="print-only" aria-label="Planning notes"></section>
+          <section id="actual-registration-panel"></section>
+          <section id="current-plan-panel"></section>
+          <section id="timetable-panel"></section>
+          <section id="future-plan-panel"></section>
+          <section id="plan-warnings"></section>
+          <details class="panel audit-details">
+            <summary>Audit details and engine inputs</summary>
+            <div id="analysis-audit"></div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/student-input-assets/student-input.js?v=20261014-12"></script>
+</body>
+</html>

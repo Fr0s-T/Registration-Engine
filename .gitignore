@@ -1,0 +1,64 @@
+# Local source documents (synthetic parser fixtures are generated in tests)
+PDF/
+data/import_sources/
+docs/local/
+
+# Python bytecode and interpreter caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test, coverage, type-checker, and linter caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging and build output
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+*.db
+*.sqlite
+*.sqlite3
+data/imports/
+data/backups/
+*.tmp
+*.temp
+.cache/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
