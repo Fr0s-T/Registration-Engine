@@ -68,6 +68,7 @@ function calendarFor(programYear, track, rows) {
 function render() {
   const rows=filteredRows(), selectedYear=document.querySelector('#year-filter').value;
   const years=selectedYear?[+selectedYear]:[1,2,3,4,5];
+  document.querySelector('#empty-timetable').classList.toggle('hidden', data.offerings.length!==0);
   document.querySelector('#year-calendars').innerHTML=years.flatMap(programYear=>tracks.map(track=>calendarFor(programYear,track,rows))).join('');
   const meetingCount=rows.reduce((n,o)=>n+o.sections.reduce((sum,s)=>sum+s.meetings.length,0),0);
   const syntheticCount=rows.filter(o=>o.synthetic_placeholder).length;
@@ -99,12 +100,12 @@ function openEdit(offeringId,sectionId) {
 document.querySelector('#year-filter').onchange=render;
 document.querySelector('#curriculum').onchange=render;
 document.querySelector('#term').onclick=async()=>{
-  if(!confirm('Changing the active term discards every current offering to prevent stale registration data. Continue?'))return;
-  try{await api('/api/admin/active-term',{method:'PUT',body:JSON.stringify({academic_year_start:+year.value,semester:semester.value,confirm_replace:true})});await load();message('Active term replaced; prior offerings were removed.')}catch(error){message(error.message,true)}
+  try{const result=await api('/api/admin/active-term',{method:'PUT',body:JSON.stringify({academic_year_start:+year.value,semester:semester.value})});await load();message(`Active term switched. ${result.offerings_available} saved offering${result.offerings_available===1?' is':'s are'} available for this semester.`)}catch(error){message(error.message,true)}
 };
 
 const modal=document.querySelector('#modal'),form=document.querySelector('#form');
 document.querySelector('#add').onclick=openAdd;
+document.querySelector('#empty-add').onclick=openAdd;
 document.querySelector('#generate-placeholders').onclick=async()=>{if(!confirm('Regenerate only Year 1–2 synthetic placeholders? Imported and manually maintained offerings will be preserved.'))return;try{const result=await api('/api/admin/timetable/generate-year-1-2',{method:'POST'});await load();message(`${result.message}: ${result.generated_offerings} offerings.`)}catch(error){message(error.message,true)}};
 document.querySelector('#cancel').onclick=()=>modal.classList.add('hidden');
 document.querySelector('#delete-offering').onclick=async()=>{

@@ -1,7 +1,13 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
-from academic_planner.database.models import StudentAttemptRecord, StudentRecord
+from academic_planner.database.models import (
+    CourseRecord,
+    CurriculumRevision,
+    DegreeRequirement,
+    StudentAttemptRecord,
+    StudentRecord,
+)
 from academic_planner.database.session import SessionLocal
 from academic_planner.student_input.parser import parse_student_contract
 from academic_planner.web.app import app
@@ -584,6 +590,7 @@ def test_student_input_page_and_preview_endpoint_are_available():
     assert "ACCEPT_PARSED_CREDIT_TOTAL" in script.text
     assert "preview_token: preview.preview_token" in script.text
     assert "reviewDecisions = [];" in script.text
+    assert "...(data.solver?.explanations || [])" in script.text
     assert "This exception has no safe automatic action" in script.text
 
     styles = client.get("/student-input-assets/student-input.css")
@@ -725,6 +732,85 @@ def test_reviewed_old_new_lab_component_is_safe_for_the_planning_engine():
         summary = DatabaseStudentPlanningService(identifier).scenario_summary()
         assert summary.identifier == identifier
         assert summary.completed_credits == 5
+    finally:
+        with SessionLocal.begin() as session:
+            session.execute(delete(StudentRecord).where(
+                StudentRecord.identifier == identifier
+            ))
+
+
+def test_fresh_public_seed_can_plan_a_completed_legacy_transcript():
+    """Synthetic filler rows must never become transcript graduation blockers."""
+    identifier = "student_990003"
+    with SessionLocal() as session:
+        mandatory = list(session.scalars(
+            select(CourseRecord)
+            .join(DegreeRequirement, DegreeRequirement.course_id == CourseRecord.id)
+            .join(
+                CurriculumRevision,
+                CurriculumRevision.id == CourseRecord.curriculum_id,
+            )
+            .where(
+                CurriculumRevision.version == "OLD",
+                CurriculumRevision.revision == "synthetic-demo",
+            )
+            .order_by(CourseRecord.code)
+        ))
+    assert mandatory
+    assert all(not course.code.startswith("SYN-") for course in mandatory)
+    assert all(course.code != "ENG108" for course in mandatory)
+
+    earned = sum(course.ects for course in mandatory if course.code != "ELCM900")
+    rows = []
+    for index, course in enumerate(mandatory, 1):
+        current = course.code == "ELCM900"
+        term = "FALL2026" if current else "SPRING2026"
+        grade = "- 0" if current else "A - 90"
+        rows.append(
+            f"{index}  {course.code}  {course.title}  {course.ects}  {term}\n{grade}"
+        )
+    text = f"""
+EN
+Contract Sheet | 990003 - Seed Transcript Student
+ELCC - Computer and Communication Engineering L - Bachelor Degree 2000-01-01
+ELCC-L-1 - Bachelor Degree - Computer and Communication Engineering Total Earned Credits : {earned} Credits
+The total number of credits needed to graduate is 300 credits (ECTS)
+The Passing Grade For GER and Common Core courses Emphasis courses and Capstone, is 60/100.
+Courses Not in Contract Sheet
+#  Course Code  Course Title  Credits  Semester  Grade
+{chr(10).join(rows)}
+Earned Credits! {earned}
+"""
+    try:
+        with TestClient(app) as client:
+            preview = client.post("/api/student-input/preview", json={
+                "text": text,
+                "current_term": "FALL2026",
+            })
+            assert preview.status_code == 200, preview.text
+            preview_body = preview.json()
+            assert preview_body["can_continue_without_review"] is True
+            saved = client.post("/api/student-input/commit", json={
+                "text": text,
+                "current_term": "FALL2026",
+                "preview_token": preview_body["preview_token"],
+            })
+            assert saved.status_code == 200, saved.text
+
+            plan = client.post("/api/plan", json={
+                "scenario_id": identifier,
+                "registration_mode": "KEEP_CURRENT",
+                "solver_time_limit_seconds": 5,
+            })
+            assert plan.status_code == 200, plan.text
+            body = plan.json()
+            assert body["solver"]["status"] in {
+                "OPTIMAL", "FEASIBLE_NOT_PROVEN_OPTIMAL",
+            }
+            assert all(
+                not course["code"].startswith("SYN-")
+                for course in body["mandatory_outstanding"]
+            )
     finally:
         with SessionLocal.begin() as session:
             session.execute(delete(StudentRecord).where(

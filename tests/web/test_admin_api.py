@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from academic_planner.database.models import PrerequisiteGroup
+from academic_planner.database.models import Offering, PrerequisiteGroup
 from academic_planner.database.session import SessionLocal
 from academic_planner.web.app import app
 
@@ -52,13 +52,71 @@ def test_setting_validation_and_persistence():
         client.post("/api/admin/settings/reset")
 
 
-def test_active_term_change_requires_confirmation_when_offerings_exist():
+def test_active_term_switch_preserves_saved_terms_and_supports_manual_empty_term_entry():
+    created_offering_id = None
     with TestClient(app) as client:
-        current = client.get("/api/admin/timetable").json()["active_term"]
-        target = {"academic_year_start": current["academic_year_start"] + 1,
-                  "semester": current["semester"], "confirm_replace": False}
-        if client.get("/api/admin/timetable").json()["offerings"]:
-            assert client.put("/api/admin/active-term", json=target).status_code == 409
+        original = client.get("/api/admin/timetable").json()
+        original_term = original["active_term"]
+        original_ids = {row["id"] for row in original["offerings"]}
+        target = {"academic_year_start": 2199, "semester": "SPRING"}
+        try:
+            switched = client.put("/api/admin/active-term", json=target)
+            assert switched.status_code == 200, switched.text
+            assert switched.json()["offerings_available"] == 0
+            assert client.get("/api/admin/timetable").json()["offerings"] == []
+
+            course_id = client.get("/api/admin/courses").json()[0]["id"]
+            created = client.post("/api/admin/offerings", json={
+                "course_id": course_id,
+                "language_track": "EN",
+                "verification_status": "VERIFIED",
+                "sections": [{
+                    "code": "MANUAL-A",
+                    "component": "LECTURE",
+                    "bundle_key": "A",
+                    "meetings": [{
+                        "weekday": 1,
+                        "start_minute": 600,
+                        "end_minute": 690,
+                    }],
+                }],
+            })
+            assert created.status_code == 201, created.text
+            created_offering_id = created.json()["id"]
+            assert {
+                row["id"] for row in client.get("/api/admin/timetable").json()["offerings"]
+            } == {created_offering_id}
+
+            restored = client.put("/api/admin/active-term", json={
+                "academic_year_start": original_term["academic_year_start"],
+                "semester": original_term["semester"],
+            })
+            assert restored.status_code == 200, restored.text
+            assert {
+                row["id"] for row in client.get("/api/admin/timetable").json()["offerings"]
+            } == original_ids
+            with SessionLocal() as session:
+                manual = session.get(Offering, created_offering_id)
+                assert manual.academic_year_start == 2199
+                assert manual.semester == "SPRING"
+        finally:
+            if created_offering_id is not None:
+                client.delete(f"/api/admin/offerings/{created_offering_id}")
+            client.put("/api/admin/active-term", json={
+                "academic_year_start": original_term["academic_year_start"],
+                "semester": original_term["semester"],
+            })
+
+
+def test_timetable_ui_exposes_non_destructive_switch_and_empty_state_entry():
+    with TestClient(app) as client:
+        page = client.get("/timetable").text
+        script = client.get("/static/timetable.js").text
+
+    assert "Switch active term" in page
+    assert 'id="empty-add"' in page
+    assert "discards every current offering" not in script
+    assert "offerings_available" in script
 
 
 def test_posting_prerequisites_again_replaces_the_single_group():

@@ -11,7 +11,7 @@
   <div class="toolbar timetable-toolbar">
     <label>Academic year starts <input id="year" type="number" min="2000" max="2200"></label>
     <select id="semester"><option>FALL</option><option>SPRING</option></select>
-    <button id="term">Replace active term</button><span class="toolbar-divider"></span>
+    <button id="term">Switch active term</button><span class="toolbar-divider"></span>
     <select id="year-filter"><option value="">Show years 1–5</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
     <select id="curriculum"><option value="">OLD + NEW</option><option>OLD</option><option>NEW</option></select>
     <button class="primary" id="add">＋ Add offering</button>
@@ -20,6 +20,12 @@
   <section class="calendar-intro">
     <div><span class="eyebrow">ACTIVE SEMESTER</span><h2>Weekly calendars by year and language</h2><p>English and French tracks are shown separately. Program year remains an organizational view only.</p></div>
     <div id="calendar-summary" class="calendar-summary"></div>
+  </section>
+  <section id="empty-timetable" class="card hidden">
+    <span class="eyebrow">NO TIMETABLE LOADED</span>
+    <h2>Add this semester's timetable manually</h2>
+    <p>The selected active semester has no offerings yet. Add courses and meeting times one at a time, or generate placeholders for Years 1–2.</p>
+    <div class="actions"><button class="primary" id="empty-add" type="button">Add first offering</button></div>
   </section>
   <div id="year-calendars" class="year-calendars"></div>
 </main>

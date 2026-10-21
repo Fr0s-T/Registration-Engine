@@ -6,7 +6,7 @@ import hashlib
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -290,13 +290,16 @@ def generate_missing_timetable(session: Session = Depends(get_session)):
 
 @router.put("/active-term")
 def active_term(payload: ActiveTermWrite, session: Session = Depends(get_session)):
-    active = session.get(ActiveTerm, 1)
-    changed = (active.academic_year_start, active.semester) != (payload.academic_year_start, payload.semester)
-    if changed and session.scalar(select(Offering.id).limit(1)) and not payload.confirm_replace:
-        raise HTTPException(409, "Changing the active term discards current offerings; confirm_replace is required")
     active = replace_active_term(session, payload.academic_year_start, payload.semester)
+    available = session.scalar(
+        select(func.count(Offering.id)).where(
+            Offering.academic_year_start == active.academic_year_start,
+            Offering.semester == active.semester,
+        )
+    ) or 0
     _commit(session); return {"academic_year_start": active.academic_year_start,
-                              "semester": active.semester, "generation": active.generation}
+                              "semester": active.semester, "generation": active.generation,
+                              "offerings_available": available}
 
 
 @router.post("/offerings", status_code=201)

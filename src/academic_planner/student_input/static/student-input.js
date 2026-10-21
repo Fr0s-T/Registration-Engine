@@ -559,9 +559,16 @@ function renderAnalysis(data) {
   renderCurrentPlan(data.current_semester);
   renderStudentTimetable(data.current_semester);
   renderFuturePlan(data.future_semesters, data.graduation.term);
-  renderPlanWarnings(data.warnings || []);
+  renderPlanWarnings(planNotes(data));
   renderAnalysisPrintNotes(data);
   renderAnalysisAudit(data);
+}
+
+function planNotes(data) {
+  return [...new Set([
+    ...(data.solver?.explanations || []),
+    ...(data.warnings || [])
+  ])];
 }
 
 function observedCourses(data) {
@@ -668,7 +675,7 @@ function renderAnalysisPrintNotes(data) {
   if (registrationMode === "KEEP_CURRENT" && savedStudent.currently_registered_courses) {
     notes.push("Current registered courses are locked, but section and CRN assignments must be verified because they are not present in the pasted portal record.");
   }
-  notes.push(...(data.warnings || []));
+  notes.push(...planNotes(data));
   $("#analysis-print-notes").innerHTML = notes.length
     ? `<strong>Planning notes</strong><ul>${notes.map(note => `<li>${esc(note)}</li>`).join("")}</ul>`
     : "";

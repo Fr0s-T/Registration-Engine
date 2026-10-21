@@ -11,6 +11,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from academic_planner.fixtures.synthetic import SyntheticFixtureLoader
+from academic_planner.policies.graduation_role import (
+    IUL_CREDIT_BAND_RULE,
+    graduation_role_for,
+)
 
 from .models import (
     ActiveTerm, CourseRecord, CurriculumRevision, DegreeRequirement, EngineSetting,
@@ -44,6 +48,11 @@ DEFAULT_SETTINGS = {
     "prefer_own_track_sections": (True, "Prefer the student's own-track section after higher-priority objectives", False),
 }
 
+_DEMO_TRAINING_CODES = {
+    "NEW": frozenset({"CCE471", "CCE572"}),
+    "OLD": frozenset({"ELCC608", "ELCC819"}),
+}
+
 def seed_defaults(session: Session) -> None:
     if session.get(ActiveTerm, 1) is None:
         session.add(ActiveTerm(id=1, academic_year_start=2026, semester="FALL"))
@@ -54,7 +63,9 @@ def seed_defaults(session: Session) -> None:
 
 
 def seed_demo_catalog(session: Session) -> None:
-    if session.scalar(select(CourseRecord.id).limit(1)) is not None:
+    existing = session.scalar(select(CourseRecord.id).limit(1)) is not None
+    if existing:
+        _normalize_demo_graduation_policy(session)
         return
     data = SyntheticFixtureLoader().load()
     revisions = {}
@@ -65,19 +76,52 @@ def seed_demo_catalog(session: Session) -> None:
         revisions[version] = revision
     ids: dict[str, int] = {}
     for course in data.courses.values():
+        curriculum = data.curricula[course.curriculum_version]
+        is_fyp = course.is_fyp and not course.code.startswith("SYN-")
+        course_type = (
+            "TRAINING"
+            if course.id in curriculum.training_requirement_ids
+            else "FINAL_PROJECT" if is_fyp else "COURSE"
+        )
+        degree_credit_eligible = not (
+            course.curriculum_version.value == "OLD" and course.code == "ENG108"
+        )
+        role = (
+            "NEEDS_REVIEW"
+            if course.code.startswith("SYN-")
+            else graduation_role_for(
+                course.credits,
+                is_fyp,
+                course_type,
+                degree_credit_eligible=degree_credit_eligible,
+            )
+        )
         row = CourseRecord(
             curriculum_id=revisions[course.curriculum_version.value].id,
             code=course.code, title=course.name, ects=course.credits,
             reference_year=course.reference_year,
             reference_semester=course.reference_semester.value,
-            is_fyp=course.is_fyp, provenance="SYNTHETIC_TEST_FIXTURE",
+            course_type=course_type, is_fyp=is_fyp,
+            graduation_role=role,
+            graduation_role_basis=(
+                "SYNTHETIC_PLACEHOLDER_NOT_A_DEGREE_REQUIREMENT"
+                if course.code.startswith("SYN-")
+                else IUL_CREDIT_BAND_RULE
+            ),
+            provenance="SYNTHETIC_TEST_FIXTURE",
             verification_status="UNVERIFIED",
         )
         session.add(row); session.flush(); ids[course.id] = row.id
-        session.add(DegreeRequirement(
-            curriculum_id=row.curriculum_id, course_id=row.id,
-            requirement_type=("FYP" if course.is_fyp else "COURSE"),
-        ))
+        if role == "MANDATORY":
+            session.add(DegreeRequirement(
+                curriculum_id=row.curriculum_id,
+                course_id=row.id,
+                requirement_type=(
+                    "FYP" if is_fyp
+                    else "TRAINING" if course_type == "TRAINING"
+                    else "COURSE"
+                ),
+            ))
     for rule in data.prerequisites:
         group = PrerequisiteGroup(course_id=ids[rule.course_id], logic="AND",
                                   provenance="SYNTHETIC_TEST_FIXTURE")
@@ -118,6 +162,69 @@ def seed_demo_catalog(session: Session) -> None:
                     session.add(MeetingRecord(section_id=row.id, weekday=meeting.weekday.value,
                                               start_minute=meeting.start_minute,
                                               end_minute=meeting.end_minute))
+
+
+def _normalize_demo_graduation_policy(session: Session) -> None:
+    """Apply post-migration policy to a new or previously seeded demo catalog.
+
+    Alembic runs before the public seeder on a blank deployment, so migration
+    data fixes cannot classify rows that do not exist yet.  Keeping this repair
+    in the idempotent seeder also upgrades databases created by older releases.
+    """
+    rows = list(session.scalars(
+        select(CourseRecord)
+        .join(CurriculumRevision)
+        .where(CurriculumRevision.revision == "synthetic-demo")
+    ))
+    desired_requirements: dict[int, str] = {}
+    for row in rows:
+        if row.code.startswith("SYN-"):
+            row.is_fyp = False
+            row.course_type = "COURSE"
+        if row.code in _DEMO_TRAINING_CODES.get(row.curriculum.version, ()):
+            row.course_type = "TRAINING"
+        degree_credit_eligible = not (
+            row.curriculum.version == "OLD" and row.code == "ENG108"
+        )
+        if row.code.startswith("SYN-"):
+            row.graduation_role = "NEEDS_REVIEW"
+            row.graduation_role_basis = (
+                "SYNTHETIC_PLACEHOLDER_NOT_A_DEGREE_REQUIREMENT"
+            )
+        else:
+            row.graduation_role = graduation_role_for(
+                row.ects,
+                row.is_fyp,
+                row.course_type,
+                degree_credit_eligible=degree_credit_eligible,
+            )
+            row.graduation_role_basis = IUL_CREDIT_BAND_RULE
+        if row.graduation_role == "MANDATORY":
+            desired_requirements[row.id] = (
+                "FYP" if row.is_fyp
+                else "TRAINING" if row.course_type == "TRAINING"
+                else "COURSE"
+            )
+
+    existing_requirements = list(session.scalars(
+        select(DegreeRequirement)
+        .join(CurriculumRevision)
+        .where(CurriculumRevision.revision == "synthetic-demo")
+    ))
+    existing_by_course = {item.course_id: item for item in existing_requirements}
+    for item in existing_requirements:
+        requirement_type = desired_requirements.get(item.course_id)
+        if requirement_type is None:
+            session.delete(item)
+        else:
+            item.requirement_type = requirement_type
+    for row in rows:
+        if row.id in desired_requirements and row.id not in existing_by_course:
+            session.add(DegreeRequirement(
+                curriculum_id=row.curriculum_id,
+                course_id=row.id,
+                requirement_type=desired_requirements[row.id],
+            ))
 
 
 def generate_year_1_2_placeholders(session: Session) -> dict:
@@ -282,7 +389,6 @@ def register_source_documents(session: Session, directory: Path) -> None:
 def replace_active_term(session: Session, year: int, semester: str) -> ActiveTerm:
     active = session.get(ActiveTerm, 1)
     if active.academic_year_start != year or active.semester != semester:
-        session.execute(delete(Offering))
         active.academic_year_start, active.semester = year, semester
         active.generation += 1
     return active

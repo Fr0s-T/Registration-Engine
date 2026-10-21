@@ -76,6 +76,7 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[test]"
 Copy-Item .env.example .env
 .\.venv\Scripts\python.exe -m alembic upgrade head
+# Run the next command only for a new public-demo database.
 .\.venv\Scripts\python.exe -m academic_planner.database.seed
 .\.venv\Scripts\python.exe -m uvicorn academic_planner.web.app:app --host 127.0.0.1 --port 8000
 ```
@@ -101,6 +102,10 @@ unless authentication and authorization are added.
 The public seed is deterministic, idempotent, and contains no student records or
 uploaded source documents. It creates synthetic OLD and NEW curricula, requirements,
 prerequisites, transition mappings, current-term offerings, and default settings.
+Use it only for a new database or a database whose curriculum revision is already
+`synthetic-demo`.
+
+For a new public-demo database, run both commands:
 
 ```powershell
 .\.venv\Scripts\python.exe -m alembic upgrade head
@@ -118,6 +123,31 @@ The target database is controlled by `DATABASE_URL` in `.env`. The default is
 private documents automatically. It refuses to run when the target already contains
 a non-synthetic catalog, preventing demo data from being mixed into an operational
 database.
+
+For an operational database containing imported curricula or student records, run
+the migration only:
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+Do **not** run `academic_planner.database.seed` against an operational database. A
+`Refusing to mix the public demo seed into a non-synthetic catalog` error means the
+safety check worked; the seeder stops before changing data.
+
+After updating an existing public-demo deployment, rerun the seed command. It
+repairs catalogs created by older seed versions by applying the graduation-credit
+policy after course insertion: synthetic filler rows and known non-degree courses
+are not mandatory, while training and final-project courses retain their required
+roles.
+
+## Active semester and timetable maintenance
+
+Open `/timetable` to select the active academic year and semester. Switching the
+active semester does not delete offerings saved for another term. If the selected
+term has no timetable, use **Add first offering** to enter a course, section, and
+meeting time manually. Switching back restores the offerings previously saved for
+that term.
 
 ## Synthetic CLI
 
